@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
-from typing import Optional, Final
+from typing import Optional, Final, List
 
 from app.domain.models import Person
 
@@ -59,3 +59,29 @@ class PeopleRepo:
             raise KeyError(f"{PERSON_NOT_FOUND}: {person_id}")
 
         return _row_to_person(row)
+    
+    def list_person(self, include_deleted: bool = False) -> List[Person]:
+        if include_deleted:
+            rows = self.conn.execute(
+                "SELECT * FROM people ORDER BY id ASC"
+            ).fetchall()
+        else:
+            rows = self.conn.execute(
+                "SELECT * FROM people WHERE is_deleted=0 ORDER BY id ASC"
+            ).fetchall()
+
+        return [_row_to_person(row) for row in rows]
+    
+    def delete_soft_person(self, person_id: int, deleted_at: str) -> Person:
+        cur = self.conn.execute(
+            """
+            UPDATE people
+            SET is_deleted=1, deleted_at=?
+            WHERE id=? AND is_deleted=0
+            """,
+            (deleted_at, person_id),
+        )
+        if cur.rowcount == 0:
+            raise KeyError(f"{PERSON_NOT_FOUND}: {person_id}")
+        
+        return self.get_person(person_id, include_deleted=True)
