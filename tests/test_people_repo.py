@@ -181,3 +181,48 @@ def test_search_person_only_alias_match() -> None:
     result_names = {person.full_name for person in results}
     expected_names = {"María López", "Juan López"}
     assert result_names == expected_names
+
+
+
+def test_update_person_updates_only_alias() -> None:
+    conn = make_conn()
+    repo = PeopleRepo(conn)
+
+    p = repo.add_person("Juan Pérez", "juan", "2025-12-29T10:00:00+00:00")
+    assert p.alias == "juan"
+
+    updated = repo.update_person(p.id, alias="juanito")
+    assert updated.full_name == "Juan Pérez"
+    assert updated.alias == "juanito"
+
+
+def test_update_person_updates_only_full_name() -> None:
+    conn = make_conn()
+    repo = PeopleRepo(conn)
+
+    p = repo.add_person("Juan Pérez", "juan", "2025-12-29T10:00:00+00:00")
+    assert p.full_name == "Juan Pérez"
+
+    updated = repo.update_person(p.id, full_name="Juan P. Pérez")
+    assert updated.full_name == "Juan P. Pérez"
+    assert updated.alias == "juan"
+
+
+def test_update_person_missing_raises_keyerror() -> None:
+    conn = make_conn()
+    repo = PeopleRepo(conn)
+
+    with pytest.raises(KeyError):
+        repo.update_person(9999, alias="x")
+
+
+def test_update_person_deleted_raises_keyerror() -> None:
+    conn = make_conn()
+    repo = PeopleRepo(conn)
+
+    p = repo.add_person("Juan Pérez", "juan", "2025-12-29T10:00:00+00:00")
+    deleted = repo.delete_soft_person(p.id, "2025-12-29T11:00:00+00:00")
+    assert deleted.is_deleted is True
+
+    with pytest.raises(KeyError):
+        repo.update_person(p.id, alias="juanito")

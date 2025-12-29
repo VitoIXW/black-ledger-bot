@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
-from typing import Optional, Final, List
+from typing import Optional, Final, List, Optional
 
 from app.domain.models import Person
 
@@ -103,3 +103,22 @@ class PeopleRepo:
         ).fetchall()
 
         return [_row_to_person(row) for row in rows]
+    
+    def update_person(self, person_id: int, full_name: Optional[str] = None, alias: Optional[str] = None) -> Person:
+        current = self.get_person(person_id, include_deleted=False)
+
+        new_full_name = current.full_name if full_name is None else full_name
+        new_alias = current.alias if alias is None else alias
+
+        cur = self.conn.execute(
+            """
+            UPDATE people
+            SET full_name=?, alias=?
+            WHERE id=? AND is_deleted=0
+            """,
+            (new_full_name, new_alias, person_id),
+        )
+        if cur.rowcount == 0:
+            raise KeyError(f"{PERSON_NOT_FOUND}: {person_id}")
+
+        return self.get_person(person_id, include_deleted=True)
