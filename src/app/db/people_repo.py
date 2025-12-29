@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Final
 
 from app.domain.models import Person
 
+PERSON_NOT_FOUND: Final[str] = "Person not found"
 
 def _row_to_person(row: sqlite3.Row) -> Person:
     return Person(
@@ -38,5 +39,23 @@ class PeopleRepo:
         ).fetchone()
         if row is None:
             raise RuntimeError("Insert succeeded but row not found (unexpected).")
+
+        return _row_to_person(row)
+    
+
+    def get_person(self, person_id: int, include_deleted: bool = False) -> Person:
+        if include_deleted:
+            row = self.conn.execute(
+                "SELECT * FROM people WHERE id=?",
+                (person_id,),
+            ).fetchone()
+        else:
+            row = self.conn.execute(
+                "SELECT * FROM people WHERE id=? AND is_deleted=0",
+                (person_id,),
+            ).fetchone()
+
+        if row is None:
+            raise KeyError(f"{PERSON_NOT_FOUND}: {person_id}")
 
         return _row_to_person(row)
