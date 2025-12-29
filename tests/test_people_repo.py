@@ -174,3 +174,10 @@ def test_search_person_only_alias_match() -> None:
     results = repo.search_person("juanl")
     assert len(results) == 1
     assert results[0].full_name == "Juan López"
+
+    results = repo.search_person("López")
+    assert len(results) == 2
+
+    result_names = {person.full_name for person in results}
+    expected_names = {"María López", "Juan López"}
+    assert result_names == expected_names
