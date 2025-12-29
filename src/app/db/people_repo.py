@@ -85,3 +85,21 @@ class PeopleRepo:
             raise KeyError(f"{PERSON_NOT_FOUND}: {person_id}")
         
         return self.get_person(person_id, include_deleted=True)
+    
+    def search_person(self, query: str, limit: int = 10) -> List[Person]:
+        q = query.strip()
+        if not q:
+            return []
+
+        pattern = f"%{q}%"
+        rows = self.conn.execute(
+            """
+            SELECT * FROM people
+            WHERE is_deleted=0 AND (full_name LIKE ? OR alias LIKE ?)
+            ORDER BY id ASC
+            LIMIT ?
+            """,
+            (pattern, pattern, limit),
+        ).fetchall()
+
+        return [_row_to_person(row) for row in rows]

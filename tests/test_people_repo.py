@@ -110,3 +110,67 @@ def test_list_person_excludes_soft_deleted() -> None:
 
     assert len(people) == 1
     assert people[0].id == p2.id
+
+def test_search_person_empty_query_returns_empty() -> None:
+    conn = make_conn()
+    repo = PeopleRepo(conn)
+    repo.add_person("Juan Pérez", "juan", "2025-12-29T10:00:00+00:00")
+
+    assert repo.search_person("") == []
+    assert repo.search_person("   ") == []
+
+
+def test_search_person_matches_alias_and_name() -> None:
+    conn = make_conn()
+    repo = PeopleRepo(conn)
+    repo.add_person("Juan Pérez", "juan", "2025-12-29T10:00:00+00:00")
+    repo.add_person("María López", "maria", "2025-12-29T10:01:00+00:00")
+
+    by_alias = repo.search_person("juan")
+    assert len(by_alias) == 1
+    assert by_alias[0].full_name == "Juan Pérez"
+
+    by_name = repo.search_person("María")
+    assert len(by_name) == 1
+    assert by_name[0].alias == "maria"
+
+
+def test_search_person_excludes_soft_deleted() -> None:
+    conn = make_conn()
+    repo = PeopleRepo(conn)
+    p1 = repo.add_person("Juan Pérez", "juan", "2025-12-29T10:00:00+00:00")
+    repo.add_person("María López", "maria", "2025-12-29T10:01:00+00:00")
+
+    repo.delete_soft_person(p1.id, "2025-12-29T11:00:00+00:00")
+
+    results = repo.search_person("juan")
+    assert results == []
+
+
+def test_search_person_multiple_matches() -> None:
+    conn = make_conn()
+    repo = PeopleRepo(conn)
+    repo.add_person("Juan Pérez", "juan", "2025-12-29T10:00:00+00:00")
+    repo.add_person("Juan López", "juanlo", "2025-12-29T10:01:00+00:00")
+    repo.add_person("María López", "maria", "2025-12-29T10:02:00+00:00")
+
+    results = repo.search_person("Juan")
+    assert len(results) == 2
+    assert any(person.full_name == "Juan Pérez" for person in results)
+    assert any(person.full_name == "Juan López" for person in results)
+
+def test_search_person_only_alias_match() -> None:
+    conn = make_conn()
+    repo = PeopleRepo(conn)
+    repo.add_person("Carlos Sánchez", "carlitos", "2025-12-29T10:00:00+00:00")
+    repo.add_person("Juan Pérez", "juan", "2025-12-29T10:00:00+00:00")
+    repo.add_person("Juan López", "juanlo", "2025-12-29T10:01:00+00:00")
+    repo.add_person("María López", "maria", "2025-12-29T10:02:00+00:00")
+
+    results = repo.search_person("carlitos")
+    assert len(results) == 1
+    assert results[0].full_name == "Carlos Sánchez"
+
+    results = repo.search_person("juanl")
+    assert len(results) == 1
+    assert results[0].full_name == "Juan López"
