@@ -19,7 +19,7 @@ class Debt:
     id: int
     person_id: int
     original_amount_eur: int  # cents
-    description: str
+    description: Optional[str]
     status: str  # OPEN / PAID / VOIDED
     created_at: str
     effective_at: Optional[str]
