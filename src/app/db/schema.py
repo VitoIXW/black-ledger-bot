@@ -19,7 +19,7 @@ def create_schema(conn: sqlite3.Connection) -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             person_id INTEGER NOT NULL,
             original_amount_eur INTEGER NOT NULL, -- store cents as integer
-            description TEXT NOT NULL,
+            description TEXT,
             status TEXT NOT NULL CHECK (status IN ('OPEN', 'PAID', 'VOIDED')),
             created_at TEXT NOT NULL,
             effective_at TEXT,
