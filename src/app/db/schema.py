@@ -35,7 +35,8 @@ def create_schema(conn: sqlite3.Connection) -> None:
             description TEXT, -- optional
             status TEXT NOT NULL CHECK (status IN ('POSTED', 'VOIDED')),
             created_at TEXT NOT NULL,
-            effective_at TEXT,
+            effective_at TEXT NOT NULL, --will be created_at by default
+            voided_at TEXT,
             FOREIGN KEY (person_id) REFERENCES people(id)
         );
 

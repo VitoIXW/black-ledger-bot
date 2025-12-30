@@ -35,4 +35,5 @@ class Payment:
     description: Optional[str]
     status: str  # POSTED / VOIDED
     created_at: str
-    effective_at: Optional[str]
+    effective_at: str
+    voided_at: Optional[str]
