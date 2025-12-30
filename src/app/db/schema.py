@@ -23,6 +23,7 @@ def create_schema(conn: sqlite3.Connection) -> None:
             status TEXT NOT NULL CHECK (status IN ('OPEN', 'PAID', 'VOIDED')),
             created_at TEXT NOT NULL,
             effective_at TEXT,
+            voided_at TEXT,   
             FOREIGN KEY (person_id) REFERENCES people(id)
         );
 

@@ -23,6 +23,7 @@ class Debt:
     status: str  # OPEN / PAID / VOIDED
     created_at: str
     effective_at: Optional[str]
+    voided_at: Optional[str]
 
 
 @dataclass(frozen=True)
