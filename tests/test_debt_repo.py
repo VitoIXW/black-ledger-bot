@@ -18,16 +18,15 @@ def make_conn() -> sqlite3.Connection:
 
 def test_add_debt_success() -> None:
     conn = make_conn()
-    people = PeopleRepo(conn)
-    debts = DebtRepo(conn)
+    people = PeopleRepo(conn, now_fn=lambda: "2025-12-29T10:00:00+00:00")
+    debts = DebtRepo(conn, now_fn=lambda: "2025-12-29T10:00:00+00:00")
 
-    p = people.add_person("Juan Pérez", "juan", "2025-12-29T10:00:00+00:00")
+    p = people.add_person("Juan Pérez", "juan")
 
     d = debts.add_debt(
         person_id=p.id,
         amount_eur_cents=1500,
         description="kebab",
-        created_at="2025-12-29T10:05:00+00:00",
     )
 
     assert d.id > 0
@@ -40,24 +39,23 @@ def test_add_debt_success() -> None:
 
 def test_add_debt_rejects_non_positive_amount() -> None:
     conn = make_conn()
-    people = PeopleRepo(conn)
-    debts = DebtRepo(conn)
+    people = PeopleRepo(conn, now_fn=lambda: "2025-12-29T10:00:00+00:00")
+    debts = DebtRepo(conn, now_fn=lambda: "2025-12-29T10:00:00+00:00")
 
-    p = people.add_person("Juan Pérez", "juan", "2025-12-29T10:00:00+00:00")
+    p = people.add_person("Juan Pérez", "juan")
 
     with pytest.raises(ValueError):
         debts.add_debt(
             person_id=p.id,
             amount_eur_cents=0,
             description="invalid",
-            created_at="2025-12-29T10:05:00+00:00",
         )
 
 
 def test_add_debt_person_not_found_or_deleted() -> None:
     conn = make_conn()
-    people = PeopleRepo(conn)
-    debts = DebtRepo(conn)
+    people = PeopleRepo(conn, now_fn=lambda: "2025-12-29T10:00:00+00:00")
+    debts = DebtRepo(conn, now_fn=lambda: "2025-12-29T10:00:00+00:00")
 
     # no existe
     with pytest.raises(KeyError):
@@ -65,11 +63,10 @@ def test_add_debt_person_not_found_or_deleted() -> None:
             person_id=999,
             amount_eur_cents=1000,
             description="test",
-            created_at="2025-12-29T10:00:00+00:00",
         )
 
     # existe pero borrada
-    p = people.add_person("María López", "maria", "2025-12-29T10:00:00+00:00")
+    p = people.add_person("María López", "maria")
     people.delete_soft_person(p.id, "2025-12-29T11:00:00+00:00")
 
     with pytest.raises(KeyError):
@@ -77,35 +74,35 @@ def test_add_debt_person_not_found_or_deleted() -> None:
             person_id=p.id,
             amount_eur_cents=1000,
             description="test",
-            created_at="2025-12-29T10:00:00+00:00",
         )
+
+
 def test_add_debt_without_description() -> None:
     conn = make_conn()
-    people = PeopleRepo(conn)
-    debts = DebtRepo(conn)
+    people = PeopleRepo(conn, now_fn=lambda: "2025-12-29T10:00:00+00:00")
+    debts = DebtRepo(conn, now_fn=lambda: "2025-12-29T10:00:00+00:00")
 
-    p = people.add_person("Juan Pérez", "juan", "2025-12-29T10:00:00+00:00")
+    p = people.add_person("Juan Pérez", "juan")
 
     d = debts.add_debt(
         person_id=p.id,
         amount_eur_cents=2000,
-        created_at="2025-12-29T10:10:00+00:00",
         description=None,
     )
 
     assert d.description is None
 
+
 def test_get_debt_existing() -> None:
     conn = make_conn()
-    people = PeopleRepo(conn)
-    debts = DebtRepo(conn)
+    people = PeopleRepo(conn, now_fn=lambda: "2025-12-29T10:00:00+00:00")
+    debts = DebtRepo(conn, now_fn=lambda: "2025-12-29T10:00:00+00:00")
 
-    p = people.add_person("Juan Pérez", "juan", "2025-12-29T10:00:00+00:00")
+    p = people.add_person("Juan Pérez", "juan")
     d = debts.add_debt(
         person_id=p.id,
         amount_eur_cents=1500,
         description="kebab",
-        created_at="2025-12-29T10:05:00+00:00",
     )
 
     got = debts.get_debt(d.id)
@@ -120,26 +117,27 @@ def test_get_debt_missing_raises_keyerror() -> None:
     with pytest.raises(KeyError):
         debts.get_debt(9999)
 
+
 def test_list_debts_empty() -> None:
     conn = make_conn()
     debts = DebtRepo(conn)
 
     assert debts.list_debts() == []
 
+
 def test_list_debts_filters_by_person_and_orders_fifo() -> None:
     conn = make_conn()
-    people = PeopleRepo(conn)
-    debts = DebtRepo(conn)
+    people = PeopleRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
+    debts = DebtRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
 
-    p1 = people.add_person("Juan Pérez", "juan", "2025-12-29T09:00:00+00:00")
-    p2 = people.add_person("María López", "maria", "2025-12-29T09:00:01+00:00")
+    p1 = people.add_person("Juan Pérez", "juan")
+    p2 = people.add_person("María López", "maria")
 
     # Juan: deuda A (más antigua)
     d1 = debts.add_debt(
         person_id=p1.id,
         amount_eur_cents=1000,
         description="A",
-        created_at="2025-12-29T10:00:00+00:00",
         effective_at="2025-12-20T10:00:00+00:00",
     )
     # Juan: deuda B (más nueva)
@@ -147,7 +145,6 @@ def test_list_debts_filters_by_person_and_orders_fifo() -> None:
         person_id=p1.id,
         amount_eur_cents=2000,
         description="B",
-        created_at="2025-12-29T10:01:00+00:00",
         effective_at="2025-12-21T10:00:00+00:00",
     )
     # María: otra
@@ -155,7 +152,6 @@ def test_list_debts_filters_by_person_and_orders_fifo() -> None:
         person_id=p2.id,
         amount_eur_cents=3000,
         description="C",
-        created_at="2025-12-29T10:02:00+00:00",
     )
 
     juan_debts = debts.list_debts(person_id=p1.id)
@@ -164,15 +160,14 @@ def test_list_debts_filters_by_person_and_orders_fifo() -> None:
 
 def test_list_debts_excludes_voided_by_default() -> None:
     conn = make_conn()
-    people = PeopleRepo(conn)
-    debts = DebtRepo(conn)
+    people = PeopleRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
+    debts = DebtRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
 
-    p = people.add_person("Juan Pérez", "juan", "2025-12-29T09:00:00+00:00")
+    p = people.add_person("Juan Pérez", "juan")
     d = debts.add_debt(
         person_id=p.id,
         amount_eur_cents=1000,
         description="A",
-        created_at="2025-12-29T10:00:00+00:00",
     )
 
     conn.execute("UPDATE debts SET status='VOIDED' WHERE id=?", (d.id,))
@@ -180,17 +175,17 @@ def test_list_debts_excludes_voided_by_default() -> None:
     assert debts.list_debts() == []
     assert debts.list_debts(include_voided=True) != []
 
+
 def test_void_debt_success() -> None:
     conn = make_conn()
-    people = PeopleRepo(conn)
-    debts = DebtRepo(conn)
+    people = PeopleRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
+    debts = DebtRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
 
-    p = people.add_person("Juan Pérez", "juan", "2025-12-29T09:00:00+00:00")
+    p = people.add_person("Juan Pérez", "juan")
     d = debts.add_debt(
         person_id=p.id,
         amount_eur_cents=1000,
         description="A",
-        created_at="2025-12-29T10:00:00+00:00",
     )
 
     vd = debts.void_debt(d.id, "2025-12-29T11:00:00+00:00")
@@ -208,15 +203,14 @@ def test_void_debt_missing_raises_keyerror() -> None:
 
 def test_void_debt_already_voided_raises_keyerror() -> None:
     conn = make_conn()
-    people = PeopleRepo(conn)
-    debts = DebtRepo(conn)
+    people = PeopleRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
+    debts = DebtRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
 
-    p = people.add_person("Juan Pérez", "juan", "2025-12-29T09:00:00+00:00")
+    p = people.add_person("Juan Pérez", "juan")
     d = debts.add_debt(
         person_id=p.id,
         amount_eur_cents=1000,
         description="A",
-        created_at="2025-12-29T10:00:00+00:00",
     )
 
     debts.void_debt(d.id, "2025-12-29T11:00:00+00:00")
@@ -224,19 +218,19 @@ def test_void_debt_already_voided_raises_keyerror() -> None:
     with pytest.raises(KeyError):
         debts.void_debt(d.id, "2025-12-29T12:00:00+00:00")
 
-#UPDATES
+
+# UPDATES
 
 def test_update_debt_updates_description_only() -> None:
     conn = make_conn()
-    people = PeopleRepo(conn)
-    debts = DebtRepo(conn)
+    people = PeopleRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
+    debts = DebtRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
 
-    p = people.add_person("Juan Pérez", "juan", "2025-12-29T09:00:00+00:00")
+    p = people.add_person("Juan Pérez", "juan")
     d = debts.add_debt(
         person_id=p.id,
         amount_eur_cents=1000,
         description=None,
-        created_at="2025-12-29T10:00:00+00:00",
     )
 
     updated = debts.update_debt(d.id, description="kebab")
@@ -246,16 +240,14 @@ def test_update_debt_updates_description_only() -> None:
 
 def test_update_debt_updates_effective_at_only() -> None:
     conn = make_conn()
-    people = PeopleRepo(conn)
-    debts = DebtRepo(conn)
+    people = PeopleRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
+    debts = DebtRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
 
-    p = people.add_person("Juan Pérez", "juan", "2025-12-29T09:00:00+00:00")
+    p = people.add_person("Juan Pérez", "juan")
     d = debts.add_debt(
         person_id=p.id,
         amount_eur_cents=1000,
         description="A",
-        created_at="2025-12-29T10:00:00+00:00",
-        effective_at=None,
     )
 
     updated = debts.update_debt(d.id, effective_at="2025-12-20T10:00:00+00:00")
@@ -273,15 +265,14 @@ def test_update_debt_missing_raises_keyerror() -> None:
 
 def test_update_debt_voided_raises_keyerror() -> None:
     conn = make_conn()
-    people = PeopleRepo(conn)
-    debts = DebtRepo(conn)
+    people = PeopleRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
+    debts = DebtRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
 
-    p = people.add_person("Juan Pérez", "juan", "2025-12-29T09:00:00+00:00")
+    p = people.add_person("Juan Pérez", "juan")
     d = debts.add_debt(
         person_id=p.id,
         amount_eur_cents=1000,
         description="A",
-        created_at="2025-12-29T10:00:00+00:00",
     )
 
     debts.void_debt(d.id, "2025-12-29T11:00:00+00:00")

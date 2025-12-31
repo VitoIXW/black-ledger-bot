@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
-from typing import Optional, Final, List
+from typing import Optional, Final, List, Callable
 
 from app.domain.models import Payment
+from app.domain.time import now_utc_iso
 
 PAYMENT_NOT_FOUND: Final[str] = "Payment not found"
 
@@ -26,10 +27,13 @@ def _row_to_payment(row: sqlite3.Row) -> Payment:
 @dataclass(frozen=True)
 class PaymentRepo:
     conn: sqlite3.Connection
+    now_fn: Callable[[], str] = now_utc_iso
 
-    def record_payment(self, person_id: int, amount_eur_cents: int, created_at: str, method: Optional[str] = None, description: Optional[str] = None, effective_at: Optional[str] = None) -> Payment:
+    def record_payment(self, person_id: int, amount_eur_cents: int, method: Optional[str] = None, description: Optional[str] = None, effective_at: Optional[str] = None) -> Payment:
         if amount_eur_cents <= 0:
             raise ValueError("amount_eur_cents must be > 0")
+        
+        created_at = self.now_fn()
 
         effective_at_final = effective_at if effective_at is not None else created_at
 

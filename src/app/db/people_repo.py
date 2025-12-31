@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
-from typing import Optional, Final, List, Optional
+from typing import Optional, Final, List, Optional, Callable
 
 from app.domain.models import Person
+from app.domain.time import now_utc_iso
 
 PERSON_NOT_FOUND: Final[str] = "Person not found"
 
@@ -22,8 +23,10 @@ def _row_to_person(row: sqlite3.Row) -> Person:
 @dataclass(frozen=True)
 class PeopleRepo:
     conn: sqlite3.Connection
+    now_fn: Callable[[], str] = now_utc_iso
 
-    def add_person(self, full_name: str, alias: Optional[str], created_at: str) -> Person:
+    def add_person(self, full_name: str, alias: Optional[str]) -> Person:
+        created_at = self.now_fn()
         cur = self.conn.execute(
             """
             INSERT INTO people(full_name, alias, created_at)

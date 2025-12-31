@@ -18,15 +18,14 @@ def make_conn() -> sqlite3.Connection:
 
 def test_record_payment_success_defaults_effective_at() -> None:
     conn = make_conn()
-    people = PeopleRepo(conn)
-    payments = PaymentRepo(conn)
+    people = PeopleRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
+    payments = PaymentRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
 
-    p = people.add_person("Juan Pérez", "juan", "2025-12-29T09:00:00+00:00")
+    p = people.add_person("Juan Pérez", "juan")
 
     pay = payments.record_payment(
         person_id=p.id,
         amount_eur_cents=5000,
-        created_at="2025-12-29T10:00:00+00:00",
         method=None,
         description=None,
         effective_at=None,
@@ -44,15 +43,14 @@ def test_record_payment_success_defaults_effective_at() -> None:
 
 def test_record_payment_success_with_explicit_effective_at() -> None:
     conn = make_conn()
-    people = PeopleRepo(conn)
-    payments = PaymentRepo(conn)
+    people = PeopleRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
+    payments = PaymentRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
 
-    p = people.add_person("Juan Pérez", "juan", "2025-12-29T09:00:00+00:00")
+    p = people.add_person("Juan Pérez", "juan")
 
     pay = payments.record_payment(
         person_id=p.id,
         amount_eur_cents=2000,
-        created_at="2025-12-29T10:00:00+00:00",
         effective_at="2025-12-20T10:00:00+00:00",
     )
 
@@ -62,51 +60,47 @@ def test_record_payment_success_with_explicit_effective_at() -> None:
 
 def test_record_payment_rejects_non_positive_amount() -> None:
     conn = make_conn()
-    people = PeopleRepo(conn)
-    payments = PaymentRepo(conn)
+    people = PeopleRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
+    payments = PaymentRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
 
-    p = people.add_person("Juan Pérez", "juan", "2025-12-29T09:00:00+00:00")
+    p = people.add_person("Juan Pérez", "juan")
 
     with pytest.raises(ValueError):
         payments.record_payment(
             person_id=p.id,
             amount_eur_cents=0,
-            created_at="2025-12-29T10:00:00+00:00",
         )
 
 
 def test_record_payment_person_not_found_or_deleted() -> None:
     conn = make_conn()
-    people = PeopleRepo(conn)
-    payments = PaymentRepo(conn)
+    people = PeopleRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
+    payments = PaymentRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
 
     with pytest.raises(KeyError):
         payments.record_payment(
             person_id=999,
             amount_eur_cents=1000,
-            created_at="2025-12-29T10:00:00+00:00",
         )
 
-    p = people.add_person("María López", "maria", "2025-12-29T09:00:00+00:00")
+    p = people.add_person("María López", "maria")
     people.delete_soft_person(p.id, "2025-12-29T11:00:00+00:00")
 
     with pytest.raises(KeyError):
         payments.record_payment(
             person_id=p.id,
             amount_eur_cents=1000,
-            created_at="2025-12-29T10:00:00+00:00",
         )
 
 def test_get_payment_existing() -> None:
     conn = make_conn()
-    people = PeopleRepo(conn)
-    payments = PaymentRepo(conn)
+    people = PeopleRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
+    payments = PaymentRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
 
-    p = people.add_person("Juan Pérez", "juan", "2025-12-29T09:00:00+00:00")
+    p = people.add_person("Juan Pérez", "juan")
     pay = payments.record_payment(
         person_id=p.id,
         amount_eur_cents=3000,
-        created_at="2025-12-29T10:00:00+00:00",
     )
 
     got = payments.get_payment(pay.id)
@@ -119,42 +113,39 @@ def test_get_payment_existing() -> None:
 
 def test_get_payment_missing_raises_keyerror() -> None:
     conn = make_conn()
-    payments = PaymentRepo(conn)
+    payments = PaymentRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
 
     with pytest.raises(KeyError):
         payments.get_payment(9999)
 
 def test_list_payments_empty() -> None:
     conn = make_conn()
-    payments = PaymentRepo(conn)
+    payments = PaymentRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
 
     assert payments.list_payments() == []
 
 
 def test_list_payments_filters_by_person_and_orders() -> None:
     conn = make_conn()
-    people = PeopleRepo(conn)
-    payments = PaymentRepo(conn)
+    people = PeopleRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
+    payments = PaymentRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
 
-    p1 = people.add_person("Juan Pérez", "juan", "2025-12-29T09:00:00+00:00")
-    p2 = people.add_person("María López", "maria", "2025-12-29T09:00:01+00:00")
+    p1 = people.add_person("Juan Pérez", "juan")
+    p2 = people.add_person("María López", "maria")
 
     pay1 = payments.record_payment(
         person_id=p1.id,
         amount_eur_cents=1000,
-        created_at="2025-12-29T10:00:00+00:00",
         effective_at="2025-12-20T10:00:00+00:00",
     )
     pay2 = payments.record_payment(
         person_id=p1.id,
         amount_eur_cents=2000,
-        created_at="2025-12-29T10:01:00+00:00",
         effective_at="2025-12-21T10:00:00+00:00",
     )
     payments.record_payment(
         person_id=p2.id,
         amount_eur_cents=3000,
-        created_at="2025-12-29T10:02:00+00:00",
     )
 
     juan_payments = payments.list_payments(person_id=p1.id)
@@ -162,26 +153,23 @@ def test_list_payments_filters_by_person_and_orders() -> None:
 
 def test_list_all_payments() -> None:
     conn = make_conn()
-    people = PeopleRepo(conn)
-    payments = PaymentRepo(conn)
+    people = PeopleRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
+    payments = PaymentRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
 
-    p1 = people.add_person("Juan Pérez", "juan", "2025-12-29T09:00:00+00:00")
-    p2 = people.add_person("María López", "maria", "2025-12-29T09:00:01+00:00")
+    p1 = people.add_person("Juan Pérez", "juan")
+    p2 = people.add_person("María López", "maria")
 
     pay1 = payments.record_payment(
         person_id=p1.id,
         amount_eur_cents=1000,
-        created_at="2025-12-29T10:00:00+00:00",
     )
     pay2 = payments.record_payment(
         person_id=p1.id,
         amount_eur_cents=2000,
-        created_at="2025-12-29T10:01:00+00:00",
     )
     pay3 = payments.record_payment(
         person_id=p2.id,
         amount_eur_cents=3000,
-        created_at="2025-12-29T10:02:00+00:00",
     )
 
     all_payments = payments.list_payments()
@@ -189,14 +177,13 @@ def test_list_all_payments() -> None:
 
 def test_void_payment_success() -> None:
     conn = make_conn()
-    people = PeopleRepo(conn)
-    payments = PaymentRepo(conn)
+    people = PeopleRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
+    payments = PaymentRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
 
-    p = people.add_person("Juan Pérez", "juan", "2025-12-29T09:00:00+00:00")
+    p = people.add_person("Juan Pérez", "juan")
     pay = payments.record_payment(
         person_id=p.id,
         amount_eur_cents=1000,
-        created_at="2025-12-29T10:00:00+00:00",
     )
 
     voided = payments.void_payment(pay.id, "2025-12-29T11:00:00+00:00")
@@ -206,7 +193,7 @@ def test_void_payment_success() -> None:
 
 def test_void_payment_missing_raises_keyerror() -> None:
     conn = make_conn()
-    payments = PaymentRepo(conn)
+    payments = PaymentRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
 
     with pytest.raises(KeyError):
         payments.void_payment(9999, "2025-12-29T11:00:00+00:00")
@@ -214,14 +201,13 @@ def test_void_payment_missing_raises_keyerror() -> None:
 
 def test_get_payment_excludes_voided_by_default() -> None:
     conn = make_conn()
-    people = PeopleRepo(conn)
-    payments = PaymentRepo(conn)
+    people = PeopleRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
+    payments = PaymentRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
 
-    p = people.add_person("Juan Pérez", "juan", "2025-12-29T09:00:00+00:00")
+    p = people.add_person("Juan Pérez", "juan")
     pay = payments.record_payment(
         person_id=p.id,
         amount_eur_cents=1000,
-        created_at="2025-12-29T10:00:00+00:00",
     )
     payments.void_payment(pay.id, "2025-12-29T11:00:00+00:00")
 
@@ -234,20 +220,18 @@ def test_get_payment_excludes_voided_by_default() -> None:
 
 def test_list_payments_excludes_voided_by_default() -> None:
     conn = make_conn()
-    people = PeopleRepo(conn)
-    payments = PaymentRepo(conn)
+    people = PeopleRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
+    payments = PaymentRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
 
-    p = people.add_person("Juan Pérez", "juan", "2025-12-29T09:00:00+00:00")
+    p = people.add_person("Juan Pérez", "juan")
     pay1 = payments.record_payment(
         person_id=p.id,
         amount_eur_cents=1000,
-        created_at="2025-12-29T10:00:00+00:00",
         effective_at="2025-12-20T10:00:00+00:00",
     )
     pay2 = payments.record_payment(
         person_id=p.id,
         amount_eur_cents=2000,
-        created_at="2025-12-29T10:01:00+00:00",
         effective_at="2025-12-21T10:00:00+00:00",
     )
 
@@ -261,14 +245,13 @@ def test_list_payments_excludes_voided_by_default() -> None:
 
 def test_update_payment_updates_method_only() -> None:
     conn = make_conn()
-    people = PeopleRepo(conn)
-    payments = PaymentRepo(conn)
+    people = PeopleRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
+    payments = PaymentRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
 
-    p = people.add_person("Juan Pérez", "juan", "2025-12-29T09:00:00+00:00")
+    p = people.add_person("Juan Pérez", "juan")
     pay = payments.record_payment(
         person_id=p.id,
         amount_eur_cents=1000,
-        created_at="2025-12-29T10:00:00+00:00",
         method=None,
         description=None,
     )
@@ -281,14 +264,13 @@ def test_update_payment_updates_method_only() -> None:
 
 def test_update_payment_updates_description_and_effective_at() -> None:
     conn = make_conn()
-    people = PeopleRepo(conn)
-    payments = PaymentRepo(conn)
+    people = PeopleRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
+    payments = PaymentRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
 
-    p = people.add_person("Juan Pérez", "juan", "2025-12-29T09:00:00+00:00")
+    p = people.add_person("Juan Pérez", "juan")
     pay = payments.record_payment(
         person_id=p.id,
         amount_eur_cents=1000,
-        created_at="2025-12-29T10:00:00+00:00",
         description="old",
     )
 
@@ -303,7 +285,7 @@ def test_update_payment_updates_description_and_effective_at() -> None:
 
 def test_update_payment_missing_raises_keyerror() -> None:
     conn = make_conn()
-    payments = PaymentRepo(conn)
+    payments = PaymentRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
 
     with pytest.raises(KeyError):
         payments.update_payment(9999, method="CASH")
@@ -311,14 +293,13 @@ def test_update_payment_missing_raises_keyerror() -> None:
 
 def test_update_payment_voided_raises_keyerror() -> None:
     conn = make_conn()
-    people = PeopleRepo(conn)
-    payments = PaymentRepo(conn)
+    people = PeopleRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
+    payments = PaymentRepo(conn, now_fn=lambda: "2025-12-29T09:00:00+00:00")
 
-    p = people.add_person("Juan Pérez", "juan", "2025-12-29T09:00:00+00:00")
+    p = people.add_person("Juan Pérez", "juan")
     pay = payments.record_payment(
         person_id=p.id,
         amount_eur_cents=1000,
-        created_at="2025-12-29T10:00:00+00:00",
     )
     payments.void_payment(pay.id, "2025-12-29T11:00:00+00:00")
 

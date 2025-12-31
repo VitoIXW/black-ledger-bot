@@ -7,6 +7,8 @@ from app.db.people_repo import PeopleRepo
 
 import pytest
 
+FIXED_NOW = "2025-12-29T10:00:00+00:00"
+
 
 def test_add_person() -> None:
     conn = sqlite3.connect(":memory:")
@@ -14,12 +16,11 @@ def test_add_person() -> None:
     conn.execute("PRAGMA foreign_keys = ON;")
     create_schema(conn)
 
-    repo = PeopleRepo(conn)
+    repo = PeopleRepo(conn, now_fn=lambda: FIXED_NOW)
 
     p = repo.add_person(
         full_name="Juan Pérez",
-        alias="juan",
-        created_at="2025-12-29T10:00:00+00:00",
+        alias="juan"
     )
 
     assert p.id > 0
@@ -27,6 +28,7 @@ def test_add_person() -> None:
     assert p.alias == "juan"
     assert p.is_deleted is False
     assert p.deleted_at is None
+    assert p.created_at == FIXED_NOW
 
 
 def make_conn() -> sqlite3.Connection:
@@ -39,9 +41,9 @@ def make_conn() -> sqlite3.Connection:
 
 def test_get_person_existing() -> None:
     conn = make_conn()
-    repo = PeopleRepo(conn)
+    repo = PeopleRepo(conn, now_fn=lambda: FIXED_NOW)
 
-    p = repo.add_person("Juan Pérez", "juan", "2025-12-29T10:00:00+00:00")
+    p = repo.add_person("Juan Pérez", "juan")
     got = repo.get_person(p.id)
 
     assert got.id == p.id
@@ -51,9 +53,9 @@ def test_get_person_existing() -> None:
     
 def test_get_person_deleted_excluded() -> None:
     conn = make_conn()
-    repo = PeopleRepo(conn)
+    repo = PeopleRepo(conn, now_fn=lambda: FIXED_NOW)
 
-    p = repo.add_person("Juan Pérez", "juan", "2025-12-29T10:00:00+00:00")
+    p = repo.add_person("Juan Pérez", "juan")
 
     # Mark as deleted directly in DB for test
     conn.execute(
@@ -83,10 +85,10 @@ def test_list_person_empty() -> None:
 
 def test_list_person_returns_all_non_deleted() -> None:
     conn = make_conn()
-    repo = PeopleRepo(conn)
+    repo = PeopleRepo(conn, now_fn=lambda: FIXED_NOW)
 
-    p1 = repo.add_person("Juan Pérez", "juan", "2025-12-29T10:00:00+00:00")
-    p2 = repo.add_person("María López", "maria", "2025-12-29T10:01:00+00:00")
+    p1 = repo.add_person("Juan Pérez", "juan")
+    p2 = repo.add_person("María López", "maria")
 
     people = repo.list_person()
 
@@ -97,14 +99,12 @@ def test_list_person_returns_all_non_deleted() -> None:
 
 def test_list_person_excludes_soft_deleted() -> None:
     conn = make_conn()
-    repo = PeopleRepo(conn)
+    repo = PeopleRepo(conn, now_fn=lambda: FIXED_NOW)
 
-    p1 = repo.add_person("Juan Pérez", "juan", "2025-12-29T10:00:00+00:00")
-    p2 = repo.add_person("María López", "maria", "2025-12-29T10:01:00+00:00")
+    p1 = repo.add_person("Juan Pérez", "juan")
+    p2 = repo.add_person("María López", "maria")
 
     repo.delete_soft_person(p1.id, "2025-12-29T11:00:00+00:00")
-
-    # repo.conn.execute("UPDATE people SET is_deleted=1, deleted_at=? WHERE id=?", ("2025-12-29T11:00:00+00:00", p1.id))
 
     people = repo.list_person()
 
@@ -113,8 +113,8 @@ def test_list_person_excludes_soft_deleted() -> None:
 
 def test_search_person_empty_query_returns_empty() -> None:
     conn = make_conn()
-    repo = PeopleRepo(conn)
-    repo.add_person("Juan Pérez", "juan", "2025-12-29T10:00:00+00:00")
+    repo = PeopleRepo(conn, now_fn=lambda: FIXED_NOW)
+    repo.add_person("Juan Pérez", "juan")
 
     assert repo.search_person("") == []
     assert repo.search_person("   ") == []
@@ -122,9 +122,9 @@ def test_search_person_empty_query_returns_empty() -> None:
 
 def test_search_person_matches_alias_and_name() -> None:
     conn = make_conn()
-    repo = PeopleRepo(conn)
-    repo.add_person("Juan Pérez", "juan", "2025-12-29T10:00:00+00:00")
-    repo.add_person("María López", "maria", "2025-12-29T10:01:00+00:00")
+    repo = PeopleRepo(conn, now_fn=lambda: FIXED_NOW)
+    repo.add_person("Juan Pérez", "juan")
+    repo.add_person("María López", "maria")
 
     by_alias = repo.search_person("juan")
     assert len(by_alias) == 1
@@ -137,9 +137,9 @@ def test_search_person_matches_alias_and_name() -> None:
 
 def test_search_person_excludes_soft_deleted() -> None:
     conn = make_conn()
-    repo = PeopleRepo(conn)
-    p1 = repo.add_person("Juan Pérez", "juan", "2025-12-29T10:00:00+00:00")
-    repo.add_person("María López", "maria", "2025-12-29T10:01:00+00:00")
+    repo = PeopleRepo(conn, now_fn=lambda: FIXED_NOW)
+    p1 = repo.add_person("Juan Pérez", "juan")
+    repo.add_person("María López", "maria")
 
     repo.delete_soft_person(p1.id, "2025-12-29T11:00:00+00:00")
 
@@ -149,10 +149,10 @@ def test_search_person_excludes_soft_deleted() -> None:
 
 def test_search_person_multiple_matches() -> None:
     conn = make_conn()
-    repo = PeopleRepo(conn)
-    repo.add_person("Juan Pérez", "juan", "2025-12-29T10:00:00+00:00")
-    repo.add_person("Juan López", "juanlo", "2025-12-29T10:01:00+00:00")
-    repo.add_person("María López", "maria", "2025-12-29T10:02:00+00:00")
+    repo = PeopleRepo(conn, now_fn=lambda: FIXED_NOW)
+    repo.add_person("Juan Pérez", "juan")
+    repo.add_person("Juan López", "juanlo")
+    repo.add_person("María López", "maria")
 
     results = repo.search_person("Juan")
     assert len(results) == 2
@@ -161,11 +161,11 @@ def test_search_person_multiple_matches() -> None:
 
 def test_search_person_only_alias_match() -> None:
     conn = make_conn()
-    repo = PeopleRepo(conn)
-    repo.add_person("Carlos Sánchez", "carlitos", "2025-12-29T10:00:00+00:00")
-    repo.add_person("Juan Pérez", "juan", "2025-12-29T10:00:00+00:00")
-    repo.add_person("Juan López", "juanlo", "2025-12-29T10:01:00+00:00")
-    repo.add_person("María López", "maria", "2025-12-29T10:02:00+00:00")
+    repo = PeopleRepo(conn, now_fn=lambda: FIXED_NOW)
+    repo.add_person("Carlos Sánchez", "carlitos")
+    repo.add_person("Juan Pérez", "juan")
+    repo.add_person("Juan López", "juanlo")
+    repo.add_person("María López", "maria")
 
     results = repo.search_person("carlitos")
     assert len(results) == 1
@@ -186,9 +186,9 @@ def test_search_person_only_alias_match() -> None:
 
 def test_update_person_updates_only_alias() -> None:
     conn = make_conn()
-    repo = PeopleRepo(conn)
+    repo = PeopleRepo(conn, now_fn=lambda: FIXED_NOW)
 
-    p = repo.add_person("Juan Pérez", "juan", "2025-12-29T10:00:00+00:00")
+    p = repo.add_person("Juan Pérez", "juan")
     assert p.alias == "juan"
 
     updated = repo.update_person(p.id, alias="juanito")
@@ -198,9 +198,9 @@ def test_update_person_updates_only_alias() -> None:
 
 def test_update_person_updates_only_full_name() -> None:
     conn = make_conn()
-    repo = PeopleRepo(conn)
+    repo = PeopleRepo(conn, now_fn=lambda: FIXED_NOW)
 
-    p = repo.add_person("Juan Pérez", "juan", "2025-12-29T10:00:00+00:00")
+    p = repo.add_person("Juan Pérez", "juan")
     assert p.full_name == "Juan Pérez"
 
     updated = repo.update_person(p.id, full_name="Juan P. Pérez")
@@ -218,9 +218,9 @@ def test_update_person_missing_raises_keyerror() -> None:
 
 def test_update_person_deleted_raises_keyerror() -> None:
     conn = make_conn()
-    repo = PeopleRepo(conn)
+    repo = PeopleRepo(conn, now_fn=lambda: FIXED_NOW)
 
-    p = repo.add_person("Juan Pérez", "juan", "2025-12-29T10:00:00+00:00")
+    p = repo.add_person("Juan Pérez", "juan")
     deleted = repo.delete_soft_person(p.id, "2025-12-29T11:00:00+00:00")
     assert deleted.is_deleted is True
 

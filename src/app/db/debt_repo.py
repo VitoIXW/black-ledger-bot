@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
-from typing import Optional, Final, List
+from typing import Optional, Final, List, Callable
 
 from app.domain.models import Debt
-
+from app.domain.time import now_utc_iso
 
 DEBT_NOT_FOUND: Final[str] = "Debt not found"
 
@@ -26,8 +26,10 @@ def _row_to_debt(row: sqlite3.Row) -> Debt:
 @dataclass(frozen=True)
 class DebtRepo:
     conn: sqlite3.Connection
+    now_fn: Callable[[], str] = now_utc_iso
 
-    def add_debt(self, person_id: int, amount_eur_cents: int, created_at: str, description: Optional[str] = None, effective_at: Optional[str] = None) -> Debt:
+    def add_debt(self, person_id: int, amount_eur_cents: int, description: Optional[str] = None, effective_at: Optional[str] = None) -> Debt:
+        created_at = self.now_fn()
         if amount_eur_cents <= 0:
             raise ValueError("amount_eur_cents must be > 0")
 
