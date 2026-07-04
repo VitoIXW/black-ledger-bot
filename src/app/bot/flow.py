@@ -7,15 +7,22 @@ from typing import Any, Dict, List, Optional
 
 from app.db.people_repo import PeopleRepo
 from app.domain.models import Debt, Person
+from app.domain.time import now_utc_iso
 from app.services.ledger_service import LedgerService
 
 ChatState = Dict[str, Any]
 
 HOME = "HOME"
+PEOPLE_MENU = "PEOPLE_MENU"
+PEOPLE_LIST = "PEOPLE_LIST"
+PERSON_DETAIL = "PERSON_DETAIL"
 PERSON_NAME = "PERSON_NAME"
 PERSON_ALIAS_CHOICE = "PERSON_ALIAS_CHOICE"
 PERSON_ALIAS_TEXT = "PERSON_ALIAS_TEXT"
 PERSON_CONFIRM = "PERSON_CONFIRM"
+PERSON_EDIT_NAME = "PERSON_EDIT_NAME"
+PERSON_EDIT_ALIAS = "PERSON_EDIT_ALIAS"
+PERSON_DELETE_CONFIRM = "PERSON_DELETE_CONFIRM"
 DEBT_SELECT_PERSON = "DEBT_SELECT_PERSON"
 DEBT_AMOUNT = "DEBT_AMOUNT"
 DEBT_DESCRIPTION = "DEBT_DESCRIPTION"
@@ -76,6 +83,16 @@ def handle_action(conn: sqlite3.Connection, state: ChatState, action: str) -> Vi
         return start_view(conn, state)
 
     try:
+        if action == "people":
+            state.clear()
+            state["screen"] = PEOPLE_MENU
+            return render_current(conn, state)
+
+        if action == "people_list":
+            state.clear()
+            state["screen"] = PEOPLE_LIST
+            return render_current(conn, state)
+
         if action == "person_add":
             state.clear()
             state["screen"] = PERSON_NAME
@@ -97,6 +114,29 @@ def handle_action(conn: sqlite3.Connection, state: ChatState, action: str) -> Vi
             state.clear()
             state["screen"] = HOME
             return _with_notice(render_current(conn, state), f"Persona creada: {person_label(person)}.")
+
+        if action == "person_edit_name" and state.get("screen") == PERSON_DETAIL:
+            state["screen"] = PERSON_EDIT_NAME
+            return render_current(conn, state)
+
+        if action == "person_edit_alias" and state.get("screen") == PERSON_DETAIL:
+            state["screen"] = PERSON_EDIT_ALIAS
+            return render_current(conn, state)
+
+        if action == "person_alias_clear" and state.get("screen") == PERSON_EDIT_ALIAS:
+            person = PeopleRepo(conn).clear_person_alias(int(state["person_id"]))
+            state["screen"] = PERSON_DETAIL
+            return _with_notice(render_current(conn, state), f"Alias actualizado: {person_label(person)}.")
+
+        if action == "person_delete" and state.get("screen") == PERSON_DETAIL:
+            state["screen"] = PERSON_DELETE_CONFIRM
+            return render_current(conn, state)
+
+        if action == "person_delete_confirm" and state.get("screen") == PERSON_DELETE_CONFIRM:
+            person = PeopleRepo(conn).delete_soft_person(int(state["person_id"]), now_utc_iso())
+            state.clear()
+            state["screen"] = PEOPLE_MENU
+            return _with_notice(render_current(conn, state), f"Persona borrada: {person_label(person)}.")
 
         if action == "debt_new":
             state.clear()
@@ -243,6 +283,19 @@ def handle_text(conn: sqlite3.Connection, state: ChatState, text: str) -> View:
             state["screen"] = PERSON_CONFIRM
             return render_current(conn, state)
 
+        if screen == PERSON_EDIT_NAME:
+            if not clean:
+                raise ValueError("necesito un nombre")
+            person = PeopleRepo(conn).update_person(int(state["person_id"]), full_name=clean)
+            state["screen"] = PERSON_DETAIL
+            return _with_notice(render_current(conn, state), f"Nombre actualizado: {person_label(person)}.")
+
+        if screen == PERSON_EDIT_ALIAS:
+            alias = clean.removeprefix("@").strip()
+            person = PeopleRepo(conn).update_person(int(state["person_id"]), alias=alias if alias else None)
+            state["screen"] = PERSON_DETAIL
+            return _with_notice(render_current(conn, state), f"Alias actualizado: {person_label(person)}.")
+
         if screen == DEBT_AMOUNT:
             state["draft"]["amount_eur"] = parse_eur_cents(clean)
             state["screen"] = DEBT_DESCRIPTION
@@ -272,10 +325,22 @@ def render_current(conn: sqlite3.Connection, state: ChatState) -> View:
             text="Luigi esta listo. Que hacemos?",
             buttons=[
                 [Button("Nueva deuda", "debt_new"), Button("Registrar pago", "payment_new")],
-                [Button("Personas", "person_add"), Button("Saldos", "balances")],
+                [Button("Personas", "people"), Button("Saldos", "balances")],
                 [Button("Deudas", "debts")],
             ],
         )
+
+    if screen == PEOPLE_MENU:
+        return View(
+            "Personas",
+            [[Button("Listar personas", "people_list")], [Button("Anadir persona", "person_add")], [Button("Volver", "home")]],
+        )
+
+    if screen == PEOPLE_LIST:
+        return _people_list_view(conn)
+
+    if screen == PERSON_DETAIL:
+        return _person_detail_view(conn, int(state["person_id"]))
 
     if screen == PERSON_NAME:
         return View("Como se llama?", [[Button("Cancelar", "cancel")]])
@@ -297,6 +362,24 @@ def render_current(conn: sqlite3.Connection, state: ChatState) -> View:
         return View(
             text=f"Crear persona:\n{draft['full_name']}{alias_text}",
             buttons=[[Button("Confirmar", "person_confirm")], [Button("Cancelar", "cancel")]],
+        )
+
+    if screen == PERSON_EDIT_NAME:
+        person = _person(conn, int(state["person_id"]))
+        return View(f"Nuevo nombre para {person_label(person)}?", [[Button("Cancelar", "cancel")]])
+
+    if screen == PERSON_EDIT_ALIAS:
+        person = _person(conn, int(state["person_id"]))
+        return View(
+            f"Nuevo alias para {person.full_name}?",
+            [[Button("Quitar alias", "person_alias_clear")], [Button("Cancelar", "cancel")]],
+        )
+
+    if screen == PERSON_DELETE_CONFIRM:
+        person = _person(conn, int(state["person_id"]))
+        return View(
+            f"Seguro que quieres borrar a {person_label(person)}?",
+            [[Button("Borrar", "person_delete_confirm")], [Button("Cancelar", "cancel")]],
         )
 
     if screen == DEBT_SELECT_PERSON:
@@ -406,6 +489,11 @@ def render_current(conn: sqlite3.Connection, state: ChatState) -> View:
 
 def _handle_person_action(conn: sqlite3.Connection, state: ChatState, person_id: int) -> View:
     screen = state.get("screen")
+    if screen == PEOPLE_LIST:
+        state.clear()
+        state["screen"] = PERSON_DETAIL
+        state["person_id"] = person_id
+        return render_current(conn, state)
     if screen == DEBT_SELECT_PERSON:
         state["draft"]["person_id"] = person_id
         state["screen"] = DEBT_AMOUNT
@@ -424,6 +512,40 @@ def _handle_person_action(conn: sqlite3.Connection, state: ChatState, person_id:
         state["screen"] = BALANCE_SELECT_PERSON
         return _person_balance_view(conn, person_id)
     return _unexpected(conn, state)
+
+
+def _people_list_view(conn: sqlite3.Connection) -> View:
+    people = PeopleRepo(conn).list_person()
+    if not people:
+        return View(
+            "No hay personas todavia.",
+            [[Button("Anadir persona", "person_add")], [Button("Volver", "people")]],
+        )
+
+    buttons = [[Button(person_label(person), f"person:{person.id}")] for person in people[:8]]
+    buttons.append([Button("Anadir persona", "person_add"), Button("Volver", "people")])
+    return View("Elige una persona:", buttons)
+
+
+def _person_detail_view(conn: sqlite3.Connection, person_id: int) -> View:
+    person = _person(conn, person_id)
+    ledger = LedgerService(conn)
+    balance = ledger.get_person_balance(person_id)
+    pending = ledger.get_pending_debts(person_id)
+    text = (
+        f"{person_label(person)}\n"
+        f"Debe: {format_eur_cents(balance.balance_eur)}\n"
+        f"Deudas abiertas: {len(pending)}"
+    )
+    return View(
+        text,
+        [
+            [Button("Ver deudas", f"debts_person:{person_id}")],
+            [Button("Editar nombre", "person_edit_name"), Button("Editar alias", "person_edit_alias")],
+            [Button("Borrar persona", "person_delete")],
+            [Button("Volver", "people_list")],
+        ],
+    )
 
 
 def _person_picker(conn: sqlite3.Connection, title: str) -> View:

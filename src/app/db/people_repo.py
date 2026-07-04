@@ -125,3 +125,17 @@ class PeopleRepo:
             raise KeyError(f"{PERSON_NOT_FOUND}: {person_id}")
 
         return self.get_person(person_id, include_deleted=True)
+
+    def clear_person_alias(self, person_id: int) -> Person:
+        cur = self.conn.execute(
+            """
+            UPDATE people
+            SET alias=NULL
+            WHERE id=? AND is_deleted=0
+            """,
+            (person_id,),
+        )
+        if cur.rowcount == 0:
+            raise KeyError(f"{PERSON_NOT_FOUND}: {person_id}")
+
+        return self.get_person(person_id, include_deleted=True)

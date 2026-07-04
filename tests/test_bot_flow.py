@@ -30,6 +30,69 @@ def test_home_renders_button_driven_entry_points() -> None:
     assert button_labels(view) == ["Nueva deuda", "Registrar pago", "Personas", "Saldos", "Deudas"]
 
 
+def test_people_entry_opens_menu_instead_of_creating_person() -> None:
+    conn = make_conn()
+    state: dict[str, object] = {}
+    start_view(conn, state)
+
+    view = handle_action(conn, state, "people")
+
+    assert view.text == "Personas"
+    assert button_labels(view) == ["Listar personas", "Anadir persona", "Volver"]
+
+
+def test_people_list_opens_person_detail_actions() -> None:
+    conn = make_conn()
+    person = PeopleRepo(conn).add_person("Juan Perez", "juan")
+    LedgerService(conn).debts.add_debt(person.id, 1250, "kebab")
+    state: dict[str, object] = {}
+    start_view(conn, state)
+
+    handle_action(conn, state, "people")
+    handle_action(conn, state, "people_list")
+    view = handle_action(conn, state, f"person:{person.id}")
+
+    assert "Juan Perez @juan" in view.text
+    assert "Deudas abiertas: 1" in view.text
+    assert button_labels(view) == ["Ver deudas", "Editar nombre", "Editar alias", "Borrar persona", "Volver"]
+
+
+def test_person_detail_can_update_name_and_clear_alias() -> None:
+    conn = make_conn()
+    person = PeopleRepo(conn).add_person("Juan Perez", "juan")
+    state: dict[str, object] = {}
+    start_view(conn, state)
+    handle_action(conn, state, "people")
+    handle_action(conn, state, "people_list")
+    handle_action(conn, state, f"person:{person.id}")
+
+    handle_action(conn, state, "person_edit_name")
+    view = handle_text(conn, state, "Juan P. Perez")
+    assert "Nombre actualizado" in view.text
+    assert "Juan P. Perez @juan" in view.text
+
+    handle_action(conn, state, "person_edit_alias")
+    view = handle_action(conn, state, "person_alias_clear")
+    assert "Alias actualizado" in view.text
+    assert "Juan P. Perez\n" in view.text
+
+
+def test_person_detail_can_soft_delete_person() -> None:
+    conn = make_conn()
+    person = PeopleRepo(conn).add_person("Juan Perez", "juan")
+    state: dict[str, object] = {}
+    start_view(conn, state)
+    handle_action(conn, state, "people")
+    handle_action(conn, state, "people_list")
+    handle_action(conn, state, f"person:{person.id}")
+
+    handle_action(conn, state, "person_delete")
+    view = handle_action(conn, state, "person_delete_confirm")
+
+    assert "Persona borrada" in view.text
+    assert PeopleRepo(conn).list_person() == []
+
+
 def test_unexpected_text_resends_current_buttons() -> None:
     conn = make_conn()
     state: dict[str, object] = {}

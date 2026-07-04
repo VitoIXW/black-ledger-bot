@@ -226,3 +226,14 @@ def test_update_person_deleted_raises_keyerror() -> None:
 
     with pytest.raises(KeyError):
         repo.update_person(p.id, alias="juanito")
+
+
+def test_clear_person_alias() -> None:
+    conn = make_conn()
+    repo = PeopleRepo(conn, now_fn=lambda: FIXED_NOW)
+
+    p = repo.add_person("Juan Pérez", "juan")
+    updated = repo.clear_person_alias(p.id)
+
+    assert updated.full_name == "Juan Pérez"
+    assert updated.alias is None
