@@ -4,7 +4,8 @@ import sqlite3
 from contextlib import contextmanager
 from typing import FrozenSet, Iterator, Optional
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.error import TelegramError
 from telegram.ext import (
     Application,
     ApplicationBuilder,
@@ -43,16 +44,15 @@ def build_application(
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     auth_message = _authorization_message(update, context)
     if auth_message is not None:
-        if update.message is not None:
-            await update.message.reply_text(auth_message, reply_markup=ReplyKeyboardRemove())
+        await _delete_incoming_message(update)
+        await _show_text_panel(update, context, auth_message)
         return
 
     with _db(context) as conn:
         view = start_view(conn, _chat_state(context))
 
-    if update.message is not None:
-        await update.message.reply_text("Limpio el teclado antiguo.", reply_markup=ReplyKeyboardRemove())
-        await update.message.reply_text(view.text, reply_markup=_markup(view))
+    await _delete_incoming_message(update)
+    await _show_panel(update, context, view)
 
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -61,10 +61,13 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     await query.answer()
+    if query.message is not None:
+        context.user_data["ledger_panel_chat_id"] = query.message.chat_id
+        context.user_data["ledger_panel_message_id"] = query.message.message_id
+
     auth_message = _authorization_message(update, context)
     if auth_message is not None:
-        if query.message is not None:
-            await query.message.edit_text(auth_message)
+        await _show_text_panel(update, context, auth_message)
         return
 
     action = query.data or "home"
@@ -72,8 +75,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     with _db(context) as conn:
         view = handle_action(conn, _chat_state(context), action)
 
-    if query.message is not None:
-        await query.message.edit_text(view.text, reply_markup=_markup(view))
+    await _show_panel(update, context, view)
 
 
 async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -82,13 +84,15 @@ async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     auth_message = _authorization_message(update, context)
     if auth_message is not None:
-        await update.message.reply_text(auth_message, reply_markup=ReplyKeyboardRemove())
+        await _delete_incoming_message(update)
+        await _show_text_panel(update, context, auth_message)
         return
 
     with _db(context) as conn:
         view = handle_text(conn, _chat_state(context), update.message.text)
 
-    await update.message.reply_text(view.text, reply_markup=_markup(view))
+    await _delete_incoming_message(update)
+    await _show_panel(update, context, view)
 
 
 def init_database(db_path: str) -> None:
@@ -112,9 +116,58 @@ def _markup(view: View) -> InlineKeyboardMarkup:
     )
 
 
+async def _show_panel(update: Update, context: ContextTypes.DEFAULT_TYPE, view: View) -> None:
+    await _show_text_panel(update, context, view.text, _markup(view))
+
+
+async def _show_text_panel(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    text: str,
+    reply_markup: Optional[InlineKeyboardMarkup] = None,
+) -> None:
+    chat_id = _chat_id(update)
+    if chat_id is None:
+        return
+
+    panel_message_id = context.user_data.get("ledger_panel_message_id")
+    if panel_message_id is not None:
+        try:
+            await context.bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=int(panel_message_id),
+                text=text,
+                reply_markup=reply_markup,
+            )
+            context.user_data["ledger_panel_chat_id"] = chat_id
+            return
+        except TelegramError:
+            context.user_data.pop("ledger_panel_message_id", None)
+            context.user_data.pop("ledger_panel_chat_id", None)
+
+    message = await context.bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup)
+    context.user_data["ledger_panel_chat_id"] = chat_id
+    context.user_data["ledger_panel_message_id"] = message.message_id
+
+
+async def _delete_incoming_message(update: Update) -> None:
+    if update.message is None:
+        return
+    try:
+        await update.message.delete()
+    except TelegramError:
+        return
+
+
 def _chat_state(context: ContextTypes.DEFAULT_TYPE) -> ChatState:
     state = context.user_data.setdefault("ledger_state", {})
     return state
+
+
+def _chat_id(update: Update) -> Optional[int]:
+    if update.effective_chat is None:
+        return None
+    return update.effective_chat.id
 
 
 def _telegram_user_id(update: Update) -> Optional[int]:
