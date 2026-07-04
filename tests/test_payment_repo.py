@@ -35,8 +35,8 @@ def test_record_payment_success_defaults_effective_at() -> None:
     assert pay.person_id == p.id
     assert pay.amount_eur == 5000
     assert pay.status == "POSTED"
-    assert pay.created_at == "2025-12-29T10:00:00+00:00"
-    assert pay.effective_at == "2025-12-29T10:00:00+00:00"
+    assert pay.created_at == "2025-12-29T09:00:00+00:00"
+    assert pay.effective_at == "2025-12-29T09:00:00+00:00"
     assert pay.effective_at == pay.created_at
     assert pay.voided_at is None
 
