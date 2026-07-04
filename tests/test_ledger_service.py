@@ -73,6 +73,21 @@ def test_record_payment_keeps_unapplied_surplus() -> None:
     assert unapplied[0].remaining_amount_eur == 500
 
 
+def test_record_payment_for_debt_pays_exact_remaining_amount() -> None:
+    _, people, ledger = make_service()
+    person = people.add_person("Juan Pérez", "juan")
+    debt = ledger.debts.add_debt(person_id=person.id, amount_eur_cents=1250, description="kebab")
+
+    ledger.record_payment_and_allocate(person_id=person.id, amount_eur_cents=500)
+    result = ledger.record_payment_for_debt(debt.id, method="Bizum")
+
+    assert result.payment.amount_eur == 750
+    assert result.payment.method == "Bizum"
+    assert result.unapplied_amount_eur == 0
+    assert result.allocations[0].allocated_amount_eur == 750
+    assert ledger.debts.get_debt(debt.id).status == "PAID"
+
+
 def test_pending_debts_and_balance_ignore_fully_paid_debts() -> None:
     _, people, ledger = make_service()
     person = people.add_person("Juan Pérez", "juan")

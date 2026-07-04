@@ -83,6 +83,38 @@ class LedgerService:
             unapplied_amount_eur=remaining_payment,
         )
 
+    def record_payment_for_debt(
+        self,
+        debt_id: int,
+        method: Optional[str] = None,
+        description: Optional[str] = None,
+        effective_at: Optional[str] = None,
+    ) -> RecordPaymentResult:
+        debt = self.debts.get_debt(debt_id)
+        remaining_debt = self.remaining_amount_for_debt(debt.id)
+        if remaining_debt <= 0:
+            raise ValueError("debt is already paid")
+
+        payment = self.payments.record_payment(
+            person_id=debt.person_id,
+            amount_eur_cents=remaining_debt,
+            method=method,
+            description=description,
+            effective_at=effective_at,
+        )
+        allocation = self.allocations.add_allocation(
+            payment_id=payment.id,
+            debt_id=debt.id,
+            amount_eur_cents=remaining_debt,
+        )
+        self._refresh_debt_status(debt.id)
+
+        return RecordPaymentResult(
+            payment=payment,
+            allocations=[allocation],
+            unapplied_amount_eur=0,
+        )
+
     def remaining_amount_for_debt(self, debt_id: int) -> int:
         debt = self.debts.get_debt(debt_id)
         paid = self.allocations.applied_amount_for_debt(debt.id)
